@@ -1,0 +1,13 @@
+{application, tcp_async,
+ [
+  {id, "tcp_async"},
+  {vsn, "1.0.1"},
+  {description, "Erlang General Non-blocking TCP/SSL Server"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, {tcp_async_app, []}},
+  {env, [{logger, {error_logger, info}}]}
+ ]}.
