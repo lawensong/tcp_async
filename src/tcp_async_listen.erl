@@ -23,9 +23,9 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
--define(ACCEPTOR_POOL, 16).
+-define(ACCEPTOR_POOL, 1).
 
--record(state, {}).
+-record(state, {protocol, lsock}).
 
 %%%===================================================================
 %%% API
@@ -38,7 +38,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link(Protocol, Port, Options, Acceptsup) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [Protocol, Port, Options, Acceptsup], []).
+  gen_server:start_link(?MODULE, [Protocol, Port, Options, Acceptsup], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -57,11 +57,13 @@ start_link(Protocol, Port, Options, Acceptsup) ->
 %%--------------------------------------------------------------------
 init([Protocol, Port, Options, Acceptsup]) ->
   process_flag(trap_exit, true),
-  case tcp_async_protocol:listen(Port, Options) of
+  SockOpts = proplists:get_value(sockopts, Options, [{reuseaddr, true}]),
+  case tcp_async_protocol:listen(Port, [{active, false} | proplists:delete(active, SockOpts)]) of
     {ok, LSock} ->
-      AcceptNum = proplists:get_value(accept, Options, ?ACCEPTOR_POOL),
-      lists:foreach(fun(_) ->
-        {ok, _APid} = tcp_async_accept_sup:start_accptor(Acceptsup, LSock) end, lists:seq(1, AcceptNum));
+      AcceptNum = proplists:get_value(acceptors, Options, ?ACCEPTOR_POOL),
+      lists:foreach(fun (_) ->
+        {ok, _APid} = tcp_async_accept_sup:start_accptor(Acceptsup, LSock) end, lists:seq(1, AcceptNum)),
+      {ok, #state{protocol = Protocol, lsock = LSock}};
     {error, Reason} ->
       {stop, {cannot_listen, Port, Reason}}
   end,

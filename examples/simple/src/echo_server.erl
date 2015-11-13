@@ -29,7 +29,7 @@
 -export([start/0, start/1]).
 
 %%callback 
--export([start_link/1, init/1, loop/3]).
+-export([start_link/1, init/1, loop/2]).
 
 -define(TCP_OPTIONS, [
 		binary,
@@ -54,7 +54,7 @@ start(Port) when is_integer(Port) ->
     [ok = application:start(App) || App <- [sasl, tcp_async]],
     Access = application:get_env(tcp_async, access, [{allow, all}]),
     SockOpts = [{access, Access},
-                {acceptors, 32}, 
+                {acceptors, 32},
                 {shutdown, infinity},
                 {max_clients, 1000000},
                 {sockopts, ?TCP_OPTIONS}],
@@ -70,17 +70,17 @@ start(Port) when is_integer(Port) ->
 start_link(SockArgs) ->
 	{ok, spawn_link(?MODULE, init, [SockArgs])}.
 
-init(SockArgs = {Transport, _Sock, _SockFun}) ->
+init(SockArgs) ->
     {ok, NewSock} = tcp_async_connection:accept(SockArgs),
-	loop(Transport, NewSock, state).
+	loop(NewSock, state).
 
-loop(Transport, Sock, State) ->
-	case Transport:recv(Sock, 0) of
+loop(Sock, State) ->
+	case gen_tcp:recv(Sock, 0) of
 		{ok, Data} ->
-			{ok, _PeerName} = Transport:peername(Sock),
+			{ok, _PeerName} = inet:peername(Sock),
 %% 			io:format("~s - ~s~n", [tcp_async_net:format(peername, PeerName), Data]),
-			Transport:send(Sock, Data),
-			loop(Transport, Sock, State);
+			gen_tcp:send(Sock, Data),
+			loop(Sock, State);
 		{error, Reason} ->
 			io:format("tcp ~s~n", [Reason]),
 			{stop, Reason}

@@ -13,6 +13,7 @@
 
 %% API
 -export([start_link/2]).
+-export([start_conn/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -24,7 +25,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {options, mfargs}).
 
 %%%===================================================================
 %%% API
@@ -36,9 +37,21 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
-start_link(_Options, _MFArgs) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Options, MFArgs) ->
+  gen_server:start_link(?MODULE, [Options, MFArgs], []).
 
+start_conn(Sup, Sock, Mod) ->
+  case call(Sup, {start_connection, Sock}) of
+    {ok, Connpid} ->
+      Mod:controlling_process(Sock, Connpid),
+      tcp_async_conn:ready(Connpid, Sock),
+      {ok, Connpid};
+    {error, Error} ->
+      {error, Error}
+  end.
+
+call(Suq, Req) ->
+  gen_server:call(Suq, Req, infinity).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -54,11 +67,9 @@ start_link(_Options, _MFArgs) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
--spec(init(Args :: term()) ->
-  {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
-  {stop, Reason :: term()} | ignore).
-init([]) ->
-  {ok, #state{}}.
+init([Options, MFArgs]) ->
+  process_flag(trap_exit, true),
+  {ok, #state{options = Options, mfargs = MFArgs}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -75,6 +86,12 @@ init([]) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
+handle_call({start_connection, Sock}, _From, State = #state{mfargs = MFArgs}) ->
+  case tcp_async_conn:start_link(Sock, MFArgs) of
+    {ok ,Pid} -> {reply, {ok, Pid}, State};
+    What -> {reply, {error, What}, State}
+  end;
+
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 

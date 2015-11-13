@@ -29,15 +29,13 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Protocol, Port, Options, MFArgs) ->
-  {ok, pid()}.
 start_link(Protocol, Port, Options, MFArgs) ->
   {ok, Sup} = supervisor:start_link(?MODULE, []),
   {ok, Connsup} = supervisor:start_child(Sup, {conn_sup, {tcp_async_conn_sup, start_link, [Options, MFArgs]},
     transient, infinity, supervisor, [tcp_async_conn_sup]}),
   {ok, Acceptsup} = supervisor:start_child(Sup, {tcp_async_accept_sup, {tcp_async_accept_sup, start_link, [Connsup]},
     transient, infinity, supervisor, [tcp_async_accept_sup]}),
-  {ok, _Listen} = supervisor:start_child(Sup, {tcp_async_listen, {tcp_async_listen, start_link, [Protocol, Port, Options, Acceptsup]},
+  {ok, _Listen} = supervisor:start_child(Sup, {listener, {tcp_async_listen, start_link, [Protocol, Port, Options, Acceptsup]},
     transient, 16#ffffffff, worker, [tcp_async_listen]}),
   {ok, Sup}.
 

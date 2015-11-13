@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -24,7 +24,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {conn_sup, lsock, sockname, ref}).
 
 %%%===================================================================
 %%% API
@@ -36,10 +36,8 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link() ->
-  {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Connsup, LSock) ->
+  gen_server:start_link(?MODULE, [Connsup, LSock], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -56,11 +54,10 @@ start_link() ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
--spec(init(Args :: term()) ->
-  {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
-  {stop, Reason :: term()} | ignore).
-init([]) ->
-  {ok, #state{}}.
+init([Connsup, LSock]) ->
+  {ok, Sockname} = inet:sockname(LSock),
+  gen_server:cast(self(), accept),
+  {ok, #state{conn_sup = Connsup, lsock = LSock, sockname = Sockname}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -91,6 +88,9 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
+handle_cast(accept, State) ->
+  accept(State);
+
 handle_cast(_Request, State) ->
   {noreply, State}.
 
@@ -108,6 +108,22 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
+handle_info({inet_async, LSock, Ref, {ok, Sock}}, State = #state{lsock = LSock, ref = Ref, conn_sup = Connsup}) ->
+  {ok, Mod} = inet_db:lookup_socket(LSock),
+  inet_db:register_socket(Sock, Mod),
+
+  case tcp_async_conn_sup:start_conn(Connsup, Sock, Mod) of
+    {ok, _Pid} -> ok;
+    {error, Reason} -> io:format("tcp_async_conn_sup start_conn get error ~p\n", [Reason])
+  end,
+  accept(State);
+
+handle_info({inet_async, LSock, Ref, {error, closed}},
+    State=#state{lsock=LSock, ref=Ref}) ->
+  %% It would be wrong to attempt to restart the acceptor when we
+  %% know this will fail.
+  {stop, normal, State};
+
 handle_info(_Info, State) ->
   {noreply, State}.
 
@@ -144,3 +160,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+accept(State = #state{lsock = Lsock})->
+  case prim_inet:async_accept(Lsock, -1) of
+    {ok, Ref} ->
+      {noreply, State#state{ref = Ref}};
+    {error, _Error} ->
+      error
+  end.
