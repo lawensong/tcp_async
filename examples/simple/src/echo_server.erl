@@ -71,7 +71,7 @@ start_link(SockArgs) ->
 	{ok, spawn_link(?MODULE, init, [SockArgs])}.
 
 init(SockArgs) ->
-    {ok, NewSock} = tcp_async_connection:accept(SockArgs),
+    {ok, NewSock} = tcp_async_conn:accept(SockArgs),
 	loop(NewSock, state).
 
 loop(Sock, State) ->

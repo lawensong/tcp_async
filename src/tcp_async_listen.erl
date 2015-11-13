@@ -23,7 +23,7 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
--define(ACCEPTOR_POOL, 1).
+-define(ACCEPTOR_POOL, 16).
 
 -record(state, {protocol, lsock}).
 
@@ -63,6 +63,8 @@ init([Protocol, Port, Options, Acceptsup]) ->
       AcceptNum = proplists:get_value(acceptors, Options, ?ACCEPTOR_POOL),
       lists:foreach(fun (_) ->
         {ok, _APid} = tcp_async_accept_sup:start_accptor(Acceptsup, LSock) end, lists:seq(1, AcceptNum)),
+      {ok, {_LIPAddress, LPort}} = inet:sockname(LSock),
+      io:format("-----> listen port: ~p", [LPort]),
       {ok, #state{protocol = Protocol, lsock = LSock}};
     {error, Reason} ->
       {stop, {cannot_listen, Port, Reason}}

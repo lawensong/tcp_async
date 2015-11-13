@@ -109,6 +109,7 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
 handle_info({inet_async, LSock, Ref, {ok, Sock}}, State = #state{lsock = LSock, ref = Ref, conn_sup = Connsup}) ->
+
   {ok, Mod} = inet_db:lookup_socket(LSock),
   inet_db:register_socket(Sock, Mod),
 
@@ -123,6 +124,13 @@ handle_info({inet_async, LSock, Ref, {error, closed}},
   %% It would be wrong to attempt to restart the acceptor when we
   %% know this will fail.
   {stop, normal, State};
+
+handle_info({inet_async, LSock, Ref, {error, _Error}},
+    _State=#state{lsock=LSock, ref=Ref}) ->
+  io:format("get error");
+
+handle_info(resume, State) ->
+  accept(State);
 
 handle_info(_Info, State) ->
   {noreply, State}.

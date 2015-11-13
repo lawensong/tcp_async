@@ -40,7 +40,11 @@ start_link() ->
 %%%===================================================================
 
 start_listen(Protocol, Port, Options, MFArgs) ->
-  tcp_async_listen_sup:start_link(Protocol, Port, Options, MFArgs).
+  MFA = {tcp_async_listen_sup, start_link,
+    [Protocol, Port, Options, MFArgs]},
+  ChildSpec = {child_id({Protocol, Port}), MFA,
+    transient, infinity, supervisor, [tcp_async_listen_sup]},
+  supervisor:start_child(?MODULE, ChildSpec).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -65,3 +69,6 @@ init([]) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+child_id({Protocol, Port}) ->
+  {listener_sup, {Protocol, Port}}.
